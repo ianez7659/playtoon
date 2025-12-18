@@ -231,7 +231,7 @@ export default function WebtoonPage({ cutCount, webtoonId, seriesId, onSave, web
               value={episodeTitle}
               onChange={(e) => setEpisodeTitle(e.target.value)}
               placeholder="Enter episode title"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
             />
           </div>
         </div>
@@ -320,7 +320,7 @@ export default function WebtoonPage({ cutCount, webtoonId, seriesId, onSave, web
                   onChange={(e) => handleCutChange(index, 'description', e.target.value)}
                   placeholder="Page Description"
                   rows={2}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
                 />
                 
                 {/* Duration and Animation Controls */}
@@ -336,7 +336,7 @@ export default function WebtoonPage({ cutCount, webtoonId, seriesId, onSave, web
                         step="0.5"
                         value={cut.duration || 3}
                         onChange={(e) => handleDurationChange(index, parseFloat(e.target.value))}
-                        className="w-16 px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-16 px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
                       />
                       <span className="text-xs text-gray-500">sec</span>
                     </div>
@@ -349,7 +349,7 @@ export default function WebtoonPage({ cutCount, webtoonId, seriesId, onSave, web
                       <select
                         value={cut.animationType || 'basic'}
                         onChange={(e) => handleAnimationChange(index, e.target.value as AnimationType)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
                       >
                         <option value="basic">Basic</option>
                         <option value="parallax">Parallax</option>
@@ -372,7 +372,7 @@ export default function WebtoonPage({ cutCount, webtoonId, seriesId, onSave, web
                     <select
                       value={cut.outEffect || 'fade-out'}
                       onChange={(e) => handleOutEffectChange(index, e.target.value as OutEffectType)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
                     >
                       <option value="fade-out">Fade Out</option>
                       <option value="slice">Slice</option>
