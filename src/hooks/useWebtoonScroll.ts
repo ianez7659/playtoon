@@ -116,30 +116,60 @@ export function useWebtoonScroll({
     }
   }, [useScrollAnimation]);
 
-  // Scroll position tracking
+  // Scroll position tracking (only for play mode)
   useEffect(() => {
+    // Skip scroll tracking in scroll mode to prevent flicker
+    if (!useScrollAnimation) {
+      return;
+    }
+
     let scrollTimeout: NodeJS.Timeout;
+    let lastUpdateTime = 0;
+    let rafId: number | null = null;
 
     const handleScroll = () => {
+      // Check if scrolled to bottom (with 1px tolerance)
+      const isAtBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 1;
+      
+      // Skip state updates when at bottom to prevent flicker
+      if (isAtBottom) {
+        return;
+      }
+      
+      const now = Date.now();
       const scrollTop = window.scrollY;
-      setIsScrolledDown(scrollTop > 100);
+      
+      // Throttle state updates to max once per 100ms
+      if (now - lastUpdateTime < 100) {
+        if (rafId === null) {
+          rafId = requestAnimationFrame(() => {
+            rafId = null;
+            setIsScrolledDown(scrollTop > 100);
+            lastUpdateTime = Date.now();
+          });
+        }
+      } else {
+        setIsScrolledDown(scrollTop > 100);
+        lastUpdateTime = now;
+      }
 
       // Hide header while scrolling
-      if (useScrollAnimation) {
-        setIsScrolling(true);
+      setIsScrolling(true);
 
-        // Show header again when scroll stops
-        clearTimeout(scrollTimeout);
-        scrollTimeout = setTimeout(() => {
-          setIsScrolling(false);
-        }, 150); // Consider scroll stopped after 150ms
-      }
+      // Show header again when scroll stops
+      clearTimeout(scrollTimeout);
+      scrollTimeout = setTimeout(() => {
+        setIsScrolling(false);
+      }, 150); // Consider scroll stopped after 150ms
     };
 
-    window.addEventListener("scroll", handleScroll);
+    window.addEventListener("scroll", handleScroll, { passive: true });
     return () => {
       window.removeEventListener("scroll", handleScroll);
       clearTimeout(scrollTimeout);
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
     };
   }, [useScrollAnimation]);
 
@@ -166,8 +196,8 @@ export function useWebtoonScroll({
   // ============================================
   // Scroll Mode Setup
   // ============================================
-  
-  // Setup scroll mode animations
+  // Scroll mode uses pure CSS, NO GSAP animations needed
+  // useScrollModeSetup will handle this internally (only runs for play mode)
   useScrollModeSetup({
     webtoonData,
     cutRefs,

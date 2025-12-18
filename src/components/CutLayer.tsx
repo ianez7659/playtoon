@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useRef, useEffect, useState } from "react";
+import { gsap } from "gsap";
 import CommandBattle from "./CommandBattle";
 import { CutData, AnimationType } from "@/utils/webtoonStorage";
 
@@ -14,9 +15,10 @@ interface CutLayerProps {
   onBattleEnd: (winner: { name: string }) => void;
   animationType?: AnimationType;
   isPlaying?: boolean;
+  mode?: 'normal' | 'scroll' | 'play';
 }
 
-export default function CutLayer({
+function CutLayer({
   cut,
   index,
   totalCuts,
@@ -26,12 +28,24 @@ export default function CutLayer({
   onBattleEnd,
   animationType = "basic",
   isPlaying = false,
+  mode = 'normal',
 }: CutLayerProps) {
   const cutWithType = { ...cut, type: cut.type || "image" };
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const canvasRefs = useRef<(HTMLCanvasElement | null)[]>([]);
   const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // Check if mobile view
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // Load image and draw strips on canvas for shutter effect
   useEffect(() => {
@@ -53,62 +67,63 @@ export default function CutLayer({
           const stripCount = 15;
           const stripWidth = img.width / stripCount;
           
+          // Draw all strips - ensure all 15 strips are drawn
+          // First, try to find all canvas elements in the DOM if refs are not ready
+          const container = containerRef.current;
+          if (container) {
+            // Find all shutter-strip canvases in the DOM
+            const allStrips = container.querySelectorAll('.shutter-strip') as NodeListOf<HTMLCanvasElement>;
+            
+            // Update refs with found canvases
+            allStrips.forEach((canvas) => {
+              const stripIndex = parseInt(canvas.getAttribute('data-strip-index') || '0', 10);
+              if (stripIndex >= 0 && stripIndex < 15) {
+                canvasRefs.current[stripIndex] = canvas;
+              }
+            });
+          }
+          
           // Draw all strips
-          canvasRefs.current.forEach((canvas, stripIndex) => {
+          for (let stripIndex = 0; stripIndex < 15; stripIndex++) {
+            let canvas = canvasRefs.current[stripIndex];
+            
+            // If canvas ref is null, try to find it in DOM
+            if (!canvas && container) {
+              canvas = container.querySelector(`canvas[data-strip-index="${stripIndex}"]`) as HTMLCanvasElement;
+              if (canvas) {
+                canvasRefs.current[stripIndex] = canvas;
+              }
+            }
+            
             if (!canvas) {
               console.warn(`Canvas ${stripIndex} is null`);
-              return;
+              continue;
             }
             
             // Get container - try parent element
-            const container = canvas.parentElement;
-            if (!container) {
+            const stripContainer = canvas.parentElement;
+            if (!stripContainer) {
               console.warn(`Container for canvas ${stripIndex} is null`);
-              return;
+              continue;
             }
             
             // Wait a bit more if container size is 0
-            const containerRect = container.getBoundingClientRect();
+            const containerRect = stripContainer.getBoundingClientRect();
             if (containerRect.width === 0 || containerRect.height === 0) {
               setTimeout(() => {
-                const rect = container.getBoundingClientRect();
+                const rect = stripContainer.getBoundingClientRect();
                 if (rect.width > 0 && rect.height > 0) {
                   drawStrip(canvas, img, stripIndex, stripCount, stripWidth, rect);
                 }
               }, 100);
-              return;
+              continue;
             }
             
             drawStrip(canvas, img, stripIndex, stripCount, stripWidth, containerRect);
-          });
-        } else if (animationType === "slice") {
-          // Draw two slices (left and right)
-          canvasRefs.current.forEach((canvas, sliceIndex) => {
-            if (!canvas) {
-              console.warn(`Canvas ${sliceIndex} is null`);
-              return;
-            }
-            
-            const container = canvas.parentElement;
-            if (!container) {
-              console.warn(`Container for canvas ${sliceIndex} is null`);
-              return;
-            }
-            
-            const containerRect = container.getBoundingClientRect();
-            if (containerRect.width === 0 || containerRect.height === 0) {
-              setTimeout(() => {
-                const rect = container.getBoundingClientRect();
-                if (rect.width > 0 && rect.height > 0) {
-                  drawSlice(canvas, img, sliceIndex, rect);
-                }
-              }, 100);
-              return;
-            }
-            
-            drawSlice(canvas, img, sliceIndex, containerRect);
-          });
+          }
         }
+        // Slice effect is only used for out effect, not in effect
+        // No canvas drawing needed for slice in effect
         
         setImageLoaded(true);
       }, 50);
@@ -139,9 +154,27 @@ export default function CutLayer({
     const rect = containerRect || container.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return;
     
-    // Each canvas represents 1/stripCount of the container width
-    const canvasWidth = rect.width / stripCount;
-    const canvasHeight = rect.height;
+    // Calculate how the image would be rendered with object-fit: contain (same as regular img)
+    const imageAspect = img.width / img.height;
+    const containerAspect = rect.width / rect.height;
+    
+    // Calculate actual rendered image size (object-fit: contain logic)
+    let renderedWidth: number;
+    let renderedHeight: number;
+    
+    if (imageAspect > containerAspect) {
+      // Image is wider - fit to width, height is smaller
+      renderedWidth = rect.width;
+      renderedHeight = renderedWidth / imageAspect;
+    } else {
+      // Image is taller - fit to height, width is smaller
+      renderedHeight = rect.height;
+      renderedWidth = renderedHeight * imageAspect;
+    }
+    
+    // Each canvas represents 1/stripCount of the RENDERED image width (not container width)
+    const canvasWidth = renderedWidth / stripCount;
+    const canvasHeight = renderedHeight;
     
     // Set actual canvas size (for high DPI displays)
     const dpr = window.devicePixelRatio || 1;
@@ -160,44 +193,11 @@ export default function CutLayer({
     const sourceWidth = stripWidth;
     const sourceHeight = img.height;
     
-    // Calculate how the full image would be displayed (maintain aspect ratio like object-fit: contain)
-    const imageAspect = img.width / img.height;
-    const containerAspect = rect.width / rect.height;
-    
-    let fullDrawWidth, fullDrawHeight, fullDrawY;
-    
-    if (imageAspect > containerAspect) {
-      // Image is wider - fit to width
-      fullDrawWidth = rect.width;
-      fullDrawHeight = fullDrawWidth / imageAspect;
-      fullDrawY = (rect.height - fullDrawHeight) / 2;
-    } else {
-      // Image is taller - fit to height
-      fullDrawHeight = rect.height;
-      fullDrawWidth = fullDrawHeight * imageAspect;
-      fullDrawY = 0;
-    }
-    
-    // Calculate this strip's portion of the full drawn image
-    const stripDrawWidth = fullDrawWidth / stripCount;
-    const fullDrawX = (rect.width - fullDrawWidth) / 2; // Center the image horizontally
-    const stripDrawX = fullDrawX + (stripIndex * stripDrawWidth);
-    
-    // Calculate where to draw on this canvas (relative to canvas, not container)
-    const canvasLeftInContainer = stripIndex * canvasWidth;
-    const drawXOnCanvas = stripDrawX - canvasLeftInContainer;
-    
-    // Draw the strip portion on this canvas
-    // The strip should fill the canvas width, so we draw from x=0
-    // Calculate the scale factor to fit the image in the container
-    const scaleX = fullDrawWidth / img.width;
-    const scaleY = fullDrawHeight / img.height;
-    
-    // Draw the strip portion, scaled to fit the canvas
+    // Draw the strip portion - each strip shows its portion of the image at rendered size
     ctx.drawImage(
       img,
       sourceX, sourceY, sourceWidth, sourceHeight, // Source: which part of image
-      0, fullDrawY, canvasWidth, fullDrawHeight // Destination: fill canvas width, maintain height
+      0, 0, canvasWidth, canvasHeight // Destination: fill canvas with rendered size
     );
   };
 
@@ -269,48 +269,35 @@ export default function CutLayer({
     );
   };
 
+  // Scroll mode: NO GSAP, just pure CSS - do nothing here
+
   return (
     <div
-      ref={setRef}
+      ref={(el) => {
+        containerRef.current = el;
+        setRef(el);
+      }}
       className="cut-container"
       style={{
-        position: "absolute", // Will be overridden to "fixed" in play mode by GSAP
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        zIndex:
-          cutWithType.type === "command-battle" ? 9999 : totalCuts - index,
+        // Scroll mode: pure CSS, no GSAP interference
+        position: mode === 'scroll' ? "relative" : "absolute",
+        top: mode === 'scroll' ? "auto" : 0,
+        left: mode === 'scroll' ? "auto" : 0,
+        right: mode === 'scroll' ? "auto" : 0,
+        bottom: mode === 'scroll' ? "auto" : 0,
+        zIndex: mode === 'scroll' ? "auto" : (cutWithType.type === "command-battle" ? 9999 : totalCuts - index),
         width: "100%",
-        height: "100%",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
+        height: mode === 'scroll' ? "auto" : "100%",
+        display: mode === 'scroll' ? "block" : "flex",
+        alignItems: mode === 'scroll' ? undefined : "center",
+        justifyContent: mode === 'scroll' ? undefined : "center",
         backgroundColor: "#000000",
         overflow: "hidden",
-      }}
+        opacity: 1,
+        transform: mode === 'scroll' ? "none" : undefined,
+        willChange: mode === 'scroll' && index >= totalCuts - 3 ? "auto" : undefined,
+      } as React.CSSProperties}
     >
-      {/* Ripple effect overlays - multiple concentric circles (at cut-container level) */}
-      {[0, 1, 2].map((rippleIndex) => (
-        <div
-          key={rippleIndex}
-          className="ripple-overlay"
-          data-ripple-index={rippleIndex}
-          style={{
-            position: "absolute",
-            top: "50%",
-            left: "50%",
-            transform: "translate(-50%, -50%)",
-            width: "0px",
-            height: "0px",
-            borderRadius: "50%",
-            border: "4px solid rgba(255, 255, 255, 0.8)",
-            pointerEvents: "none",
-            opacity: 0,
-            zIndex: 10000 + rippleIndex, // Very high z-index to appear above everything
-          }}
-        />
-      ))}
       
       {cutWithType.type === "command-battle" ? (
         <div className="w-full h-full">
@@ -352,8 +339,11 @@ export default function CutLayer({
               display: "flex",
               width: "100%",
               height: "100%",
+              minHeight: mode === 'scroll' ? "100%" : undefined,
               alignItems: "center",
               justifyContent: "center",
+              paddingTop: mode === 'scroll' && isMobile && index === 0 ? "9vh" : undefined,
+              willChange: mode === 'scroll' && index >= totalCuts - 3 ? "auto" : undefined,
             }}
           >
             {/* Unified container for both desktop and mobile */}
@@ -361,19 +351,81 @@ export default function CutLayer({
               className="flex items-center justify-center"
               style={{
                 width: "100%",
-                maxWidth: "800px",
-                aspectRatio: "4/5",
-                maxHeight: "100%",
+                height: "100%",
+                minHeight: mode === 'scroll' ? "100%" : undefined,
                 position: "relative",
                 overflow: "hidden",
               }}
             >
-              {animationType === "shutter" ? (
+              {animationType === "shutter" && mode !== "scroll" ? (
                 // Shutter effect: split image into strips using Canvas
                 // Each strip is a canvas element showing only its portion of the image
                 [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].map((stripIndex) => {
-                  const stripWidth = 100 / 15; // Each strip is 1/15 of the width
-                  const leftPercent = stripIndex * stripWidth;
+                  // Calculate rendered image size (object-fit: contain) to match regular img
+                  const container = containerRef.current;
+                  const image = imageRef.current;
+                  
+                  // If container or image not ready, use default positioning
+                  // They will be properly positioned when image loads via useEffect
+                  if (!container || !image) {
+                    return (
+                      <canvas
+                        key={`shutter-strip-${stripIndex}`}
+                        ref={(el) => {
+                          if (el) {
+                            canvasRefs.current[stripIndex] = el;
+                            // Redraw when canvas is mounted and image is loaded
+                            if (imageRef.current && imageLoaded && containerRef.current) {
+                              setTimeout(() => {
+                                const stripCount = 15;
+                                const stripWidth = imageRef.current!.width / stripCount;
+                                const rect = containerRef.current!.getBoundingClientRect();
+                                drawStrip(el, imageRef.current!, stripIndex, stripCount, stripWidth, rect);
+                              }, 10);
+                            }
+                          } else {
+                            canvasRefs.current[stripIndex] = null;
+                          }
+                        }}
+                        className="shutter-strip"
+                        data-strip-index={stripIndex}
+                        style={{
+                          position: "absolute",
+                          top: "50%",
+                          left: `${(stripIndex / 15) * 100}%`,
+                          width: `${(100 / 15)}%`,
+                          height: "100%",
+                          transform: "translateY(-50%) translateZ(0)",
+                          pointerEvents: "none",
+                          willChange: "transform",
+                          backfaceVisibility: "hidden",
+                          imageRendering: "crisp-edges",
+                        }}
+                      />
+                    );
+                  }
+                  
+                  const containerRect = container.getBoundingClientRect();
+                  const imageAspect = image.width / image.height;
+                  const containerAspect = containerRect.width / containerRect.height;
+                  
+                  let renderedWidth: number;
+                  let renderedHeight: number;
+                  
+                  if (imageAspect > containerAspect) {
+                    renderedWidth = containerRect.width;
+                    renderedHeight = renderedWidth / imageAspect;
+                  } else {
+                    renderedHeight = containerRect.height;
+                    renderedWidth = renderedHeight * imageAspect;
+                  }
+                  
+                  // Calculate left position: center the rendered image, then position this strip
+                  const renderedLeft = (containerRect.width - renderedWidth) / 2;
+                  const stripWidth = renderedWidth / 15; // Each strip is 1/15 of rendered width
+                  const stripLeft = renderedLeft + (stripIndex * stripWidth);
+                  const leftPercent = (stripLeft / containerRect.width) * 100;
+                  const widthPercent = (stripWidth / containerRect.width) * 100;
                   
                   return (
                     <canvas
@@ -382,11 +434,12 @@ export default function CutLayer({
                         if (el) {
                           canvasRefs.current[stripIndex] = el;
                           // Redraw when canvas is mounted
-                          if (imageRef.current && imageLoaded) {
+                          if (imageRef.current && imageLoaded && container) {
                             setTimeout(() => {
                               const stripCount = 15;
                               const stripWidth = imageRef.current!.width / stripCount;
-                              drawStrip(el, imageRef.current!, stripIndex, stripCount, stripWidth);
+                              const rect = container.getBoundingClientRect();
+                              drawStrip(el, imageRef.current!, stripIndex, stripCount, stripWidth, rect);
                             }, 10);
                           }
                         } else {
@@ -397,59 +450,14 @@ export default function CutLayer({
                       data-strip-index={stripIndex}
                       style={{
                         position: "absolute",
-                        top: 0,
+                        top: `${((containerRect.height - renderedHeight) / 2) / containerRect.height * 100}%`,
                         left: `${leftPercent}%`,
-                        width: `${stripWidth}%`,
-                        height: "100%",
+                        width: `${widthPercent}%`,
+                        height: `${(renderedHeight / containerRect.height) * 100}%`,
+                        transform: "translateZ(0)", // Force hardware acceleration
                         pointerEvents: "none",
                         willChange: "transform",
                         backfaceVisibility: "hidden",
-                        transform: "translateZ(0)", // Force hardware acceleration
-                        imageRendering: "crisp-edges",
-                      }}
-                    />
-                  );
-                })
-              ) : animationType === "slice" ? (
-                // Slice effect: split image into two parts (left and right) using Canvas
-                [0, 1].map((sliceIndex) => {
-                  const sliceWidth = 50; // Each slice is 50% of the width
-                  const leftPercent = sliceIndex * sliceWidth;
-                  
-                  return (
-                    <canvas
-                      key={`slice-part-${sliceIndex}`}
-                      ref={(el) => {
-                        if (el) {
-                          canvasRefs.current[sliceIndex] = el;
-                          // Redraw when canvas is mounted
-                          if (imageRef.current && imageLoaded) {
-                            setTimeout(() => {
-                              const container = el.parentElement;
-                              if (container) {
-                                const rect = container.getBoundingClientRect();
-                                if (rect.width > 0 && rect.height > 0) {
-                                  drawSlice(el, imageRef.current!, sliceIndex, rect);
-                                }
-                              }
-                            }, 10);
-                          }
-                        } else {
-                          canvasRefs.current[sliceIndex] = null;
-                        }
-                      }}
-                      className="slice-part"
-                      data-slice-index={sliceIndex}
-                      style={{
-                        position: "absolute",
-                        top: 0,
-                        left: `${leftPercent}%`,
-                        width: `${sliceWidth}%`,
-                        height: "100%",
-                        pointerEvents: "none",
-                        willChange: "transform",
-                        backfaceVisibility: "hidden",
-                        transform: "translateZ(0)", // Force hardware acceleration
                         imageRendering: "crisp-edges",
                       }}
                     />
@@ -459,10 +467,28 @@ export default function CutLayer({
                 <img
                   src={cutWithType.imageUrl}
                   alt={`Cut ${index + 1}`}
+                  loading={mode === 'scroll' 
+                    ? (index >= totalCuts - 3 ? "eager" : "lazy") // Eager load last 3 images
+                    : "eager"}
+                  decoding="async"
                   style={{
-                    width: "100%",
-                    height: "100%",
+                    width: mode === 'scroll' 
+                      ? (isMobile ? "100%" : "auto")
+                      : "100%",
+                    height: mode === 'scroll'
+                      ? (isMobile ? "auto" : "100vh")
+                      : "100%",
+                    maxWidth: mode === 'scroll' && isMobile ? "100%" : undefined,
+                    maxHeight: mode === 'scroll' && !isMobile ? "100vh" : undefined,
                     objectFit: "contain",
+                    display: "block",
+                    imageRendering: "auto",
+                    backfaceVisibility: "hidden",
+                    transform: "translateZ(0)",
+                    opacity: 1,
+                    aspectRatio: mode === 'scroll' 
+                      ? (isMobile ? "9/16" : "4/5") // Apply to all scroll mode images
+                      : undefined,
                   }}
                   className="cut-image"
                 />
@@ -478,5 +504,20 @@ export default function CutLayer({
     </div>
   );
 }
+
+// Memoize to prevent unnecessary re-renders during scroll
+export default React.memo(CutLayer, (prevProps, nextProps) => {
+  // Only re-render if these props change
+  return (
+    prevProps.cut.imageUrl === nextProps.cut.imageUrl &&
+    prevProps.index === nextProps.index &&
+    prevProps.totalCuts === nextProps.totalCuts &&
+    prevProps.isBattleActive === nextProps.isBattleActive &&
+    prevProps.currentBattleCutIndex === nextProps.currentBattleCutIndex &&
+    prevProps.animationType === nextProps.animationType &&
+    prevProps.isPlaying === nextProps.isPlaying &&
+    prevProps.mode === nextProps.mode
+  );
+});
 
 

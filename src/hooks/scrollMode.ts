@@ -5,6 +5,7 @@ import { AnimationType, WebtoonData } from "@/utils/webtoonStorage";
 import { ANIMATION_CONFIGS } from "@/utils/animationConfigs";
 import { setCutInitialState } from "@/utils/animationHelpers";
 import { Z_INDEX_BASE } from "./constants";
+import type Lenis from "@studio-freight/lenis";
 
 interface ScrollModeParams {
   webtoonData: WebtoonData;
@@ -18,7 +19,7 @@ interface ScrollModeParams {
   setCurrentBattleCutIndex: (index: number | null) => void;
   setShowEncounterPortal: (show: boolean) => void;
   isPlayingRef: React.MutableRefObject<boolean>;
-  lenisRef: React.MutableRefObject<any>;
+  lenisRef: React.MutableRefObject<Lenis | null>;
 }
 
 /**
@@ -93,8 +94,16 @@ export function applyAnimation(
   // Scroll Mode - No animation, just display
   // ============================================
 
-  // Scroll mode: no animation, just set to visible state
-  gsap.set(cutContainer, { opacity: 1, scale: 1 });
+  // Scroll mode: set position to relative so cuts stack vertically, no animation, just set to visible state
+  gsap.set(cutContainer, { 
+    position: "relative",
+    opacity: 1, 
+    scale: 1,
+    top: "auto",
+    left: "auto",
+    right: "auto",
+    bottom: "auto",
+  });
   return gsap.to(cutContainer, { duration: 0, immediateRender: false });
 }
 
@@ -115,7 +124,47 @@ export function useScrollModeSetup(params: ScrollModeParams) {
   } = params;
 
   useEffect(() => {
-    if (useScrollAnimation && cutRefs.current.length > 0) {
+    // Scroll mode: Clean up all GSAP properties from play mode
+    if (!useScrollAnimation && cutRefs.current.length > 0) {
+      // Kill all ScrollTriggers
+      ScrollTrigger.getAll().forEach((trigger) => trigger.kill());
+
+      // Stop any existing scroll animation
+      if (scrollTweenRef.current) {
+        scrollTweenRef.current.kill();
+        setScrollTween(null);
+        setIsPlaying(false);
+      }
+
+      // Clean up all GSAP properties from all cuts
+      cutRefs.current.forEach((cutRef) => {
+        if (cutRef) {
+          const cutContainer = cutRef.querySelector('.cut-container') as HTMLDivElement;
+          if (cutContainer) {
+            // Kill all GSAP animations
+            gsap.killTweensOf(cutContainer);
+            // Clear ALL GSAP properties
+            gsap.set(cutContainer, {
+              clearProps: "all",
+            });
+            // Force reset to relative positioning
+            gsap.set(cutContainer, {
+              position: "relative",
+              top: "auto",
+              left: "auto",
+              right: "auto",
+              bottom: "auto",
+              opacity: 1,
+              scale: 1,
+              x: 0,
+              y: 0,
+              zIndex: "auto",
+            });
+          }
+        }
+      });
+    } else if (useScrollAnimation && cutRefs.current.length > 0) {
+      // Play mode: existing logic
       // Kill existing animations before setting up new ones
       ScrollTrigger.getAll().forEach((trigger) => trigger.kill());
 

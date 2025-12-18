@@ -144,6 +144,31 @@ function startHoldBasedScroll({
             gsap.set(nextCutContainer, { 
               zIndex: webtoonData.cuts.length - nextCutIndex + 1000,
             });
+            
+            // For ripple effect, ensure proper initialization
+            if (nextCutAnimationType === "ripple") {
+              const cutImage = nextCutContainer.querySelector('.cut-image') as HTMLImageElement;
+              if (cutImage) {
+                // Reset image state completely
+                gsap.set(cutImage, {
+                  opacity: 0,
+                  filter: 'url(#ripple-wave-filter)',
+                  scale: 1,
+                  transformOrigin: "center center",
+                });
+                
+                // Reset displacement map scale to 50
+                const displacementMap = document.querySelector('#ripple-wave-filter feDisplacementMap') as SVGElement;
+                if (displacementMap) {
+                  displacementMap.setAttribute('scale', '50');
+                }
+                
+                // Ensure container has no clip-path
+                gsap.set(nextCutContainer, {
+                  clipPath: "none",
+                });
+              }
+            }
           });
           
           // Animate new cut sliding down from top
@@ -169,8 +194,8 @@ function startHoldBasedScroll({
           const outEffect = currentCut?.outEffect || currentConfig.play.outEffect || "fade-out";
           const hasSliceExit = outEffect === "slice";
           const exitAnimationPosition = "<";
-          // Next cut appears after slice effect completes (if slice exit exists)
-          const nextCutAnimationPosition = hasSliceExit ? `+=${TRANSITION_DURATION}` : "<";
+          // Next cut appears immediately after slice effect starts (no delay)
+          const nextCutAnimationPosition = hasSliceExit ? "<" : "<";
           
           // Animate previous cut exit - use configured out effect
           if (currentCutContainer) {
@@ -186,26 +211,8 @@ function startHoldBasedScroll({
           }
           
           // Add next cut animation to timeline
-          // If previous cut had slice out effect, next cut uses zoom-in
-          // Otherwise, use next cut's own animation type
-          if (hasSliceExit) {
-            // Previous cut had slice out effect - next cut always uses zoom-in
-            gsap.set(nextCutContainer, {
-              opacity: 0,
-              scale: 0.5,
-              immediateRender: true
-            });
-            timeline.to(
-              nextCutContainer,
-              {
-                opacity: 1,
-                scale: 1,
-                duration: TRANSITION_DURATION,
-                ease: "power3.out",
-              },
-              nextCutAnimationPosition
-            );
-          } else if (nextCutAnimationType === "shutter") {
+          // Use next cut's own animation type regardless of previous cut's out effect
+          if (nextCutAnimationType === "shutter") {
             const playStrips = nextCutContainer.querySelectorAll('.shutter-strip');
             if (playStrips.length > 0) {
               // Set initial state: image strips hidden below (yPercent: 100)
@@ -227,42 +234,114 @@ function startHoldBasedScroll({
             } else {
               timeline.to(nextCutContainer, animationProps, nextCutAnimationPosition);
             }
+          } else if (nextCutAnimationType === "ripple") {
+            // Ripple effect: Skip container clip-path animation, only use wave distortion
+            // Set container to full visibility without clip-path immediately
+            gsap.set(nextCutContainer, {
+              opacity: 0,
+              clipPath: "none",
+            });
           } else {
             // For other animations, check if next cut has slice parts (for exit animation)
             // But next cut itself uses its own animation type
             timeline.to(nextCutContainer, animationProps, nextCutAnimationPosition);
           }
           
-          // Ripple effect: Create multiple concentric ripple circles with sequential animation
+          // Ripple effect: Apply wave distortion with fade-in
           if (nextCutAnimationType === "ripple") {
-            const rippleOverlays = nextCutContainer.querySelectorAll('.ripple-overlay');
-            if (rippleOverlays.length > 0) {
-              // Calculate screen diagonal for maximum ripple size
-              const maxSize = Math.sqrt(window.innerWidth ** 2 + window.innerHeight ** 2);
+            const cutImage = nextCutContainer.querySelector('.cut-image') as HTMLImageElement;
+            if (cutImage) {
+              // Create SVG filter for wave distortion if it doesn't exist
+              const svgFilter = document.getElementById('ripple-wave-filter');
+              if (!svgFilter) {
+                const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                svg.setAttribute('style', 'position: absolute; width: 0; height: 0; pointer-events: none;');
+                svg.innerHTML = `
+                  <defs>
+                    <filter id="ripple-wave-filter" x="-50%" y="-50%" width="200%" height="200%">
+                      <feTurbulence 
+                        type="fractalNoise" 
+                        baseFrequency="0.01 0.01" 
+                        numOctaves="4" 
+                        result="noise"
+                        seed="2">
+                      </feTurbulence>
+                      <feDisplacementMap 
+                        in="SourceGraphic" 
+                        in2="noise" 
+                        scale="50" 
+                        xChannelSelector="R" 
+                        yChannelSelector="G">
+                      </feDisplacementMap>
+                    </filter>
+                  </defs>
+                `;
+                document.body.appendChild(svg);
+              }
               
-              rippleOverlays.forEach((ripple, rippleIndex) => {
-                const delay = rippleIndex * 0.2; // Stagger delay for each ripple (increased for better visibility)
+              // Ensure displacement map is reset to 50 (in case it was used before)
+              const displacementMap = document.querySelector('#ripple-wave-filter feDisplacementMap') as SVGElement;
+              if (displacementMap) {
+                displacementMap.setAttribute('scale', '50');
+              }
+              
+              // Ensure container has no clip-path from the start
+              gsap.set(nextCutContainer, {
+                clipPath: "none",
+              });
+              
+              // Set initial state: hidden with wave filter at scale 50
+              gsap.set(cutImage, {
+                opacity: 0,
+                filter: 'url(#ripple-wave-filter)',
+                scale: 1,
+                transformOrigin: "center center",
+              });
+              
+              // Set container to visible immediately (no clip-path animation)
+              timeline.set(nextCutContainer, {
+                opacity: 1,
+                clipPath: "none",
+              }, nextCutAnimationPosition);
+              
+              // Animate wave distortion scale from 50 to 0 with fade-in (simultaneously)
+              const waveTimeline = gsap.timeline();
+              
+              // Fade in image and animate wave distortion simultaneously
+              if (displacementMap) {
+                // Create animation object for displacement map scale
+                const scaleObj = { scale: 90 };
                 
-                // Set initial state - ensure it's visible and centered
-                gsap.set(ripple, {
-                  width: 0,
-                  height: 0,
-                  opacity: 0.9,
-                  scale: 1,
-                  x: 0,
-                  y: 0,
-                  transformOrigin: "center center",
-                });
-                
-                // Animate ripple expansion with fade out
-                timeline.to(ripple, {
-                  width: maxSize * 2.5,
-                  height: maxSize * 2.5,
-                  opacity: 0,
+                // Animate both opacity and distortion at the same time
+                waveTimeline.to(cutImage, {
+                  opacity: 1,
                   duration: 1.2,
                   ease: "power2.out",
-                }, nextCutAnimationPosition + delay);
-              });
+                });
+                
+                waveTimeline.to(scaleObj, {
+                  scale: 0,
+                  duration: 1.2,
+                  ease: "power2.out",
+                  onUpdate: function() {
+                    const scale = this.targets()[0].scale;
+                    displacementMap.setAttribute('scale', String(scale));
+                  },
+                }, "<"); // Start at the same time as opacity animation
+              } else {
+                // Fallback if displacement map not found
+                waveTimeline.to(cutImage, {
+                  opacity: 1,
+                  duration: 1.2,
+                  ease: "power2.out",
+                });
+              }
+              
+              // Remove filter after animation
+              waveTimeline.set(cutImage, { filter: 'none' });
+              
+              // Add wave timeline to main timeline
+              timeline.add(waveTimeline, nextCutAnimationPosition);
             }
           }
         }
@@ -389,48 +468,48 @@ function handleSliceOutEffect(
       });
       
       if (imgRect.width > 0 && imgRect.height > 0) {
-        // Create two slice divs that cover the image
-        const sliceLeft = document.createElement('div');
-        const sliceRight = document.createElement('div');
+        // Create two slice divs that cover the image (top and bottom halves)
+        const sliceTop = document.createElement('div');
+        const sliceBottom = document.createElement('div');
         
-        sliceLeft.className = 'slice-part slice-left';
-        sliceRight.className = 'slice-part slice-right';
+        sliceTop.className = 'slice-part slice-top';
+        sliceBottom.className = 'slice-part slice-bottom';
         
         // Calculate relative positions within parent
         const relativeTop = imgRect.top - parentRect.top;
         const relativeLeft = imgRect.left - parentRect.left;
-        const sliceWidth = imgRect.width / 2;
+        const sliceHeight = imgRect.height / 2;
         
         // Position slices to cover the image - relative to image parent
-        sliceLeft.style.cssText = `
+        // Top slice
+        sliceTop.style.cssText = `
           position: absolute;
           top: ${relativeTop}px;
           left: ${relativeLeft}px;
-          width: ${sliceWidth}px;
-          height: ${imgRect.height}px;
+          width: ${imgRect.width}px;
+          height: ${sliceHeight}px;
           overflow: hidden;
           pointer-events: none;
           will-change: transform;
-          z-index: 10000;
         `;
         
-        sliceRight.style.cssText = `
+        // Bottom slice
+        sliceBottom.style.cssText = `
           position: absolute;
-          top: ${relativeTop}px;
-          left: ${relativeLeft + sliceWidth}px;
-          width: ${sliceWidth}px;
-          height: ${imgRect.height}px;
+          top: ${relativeTop + sliceHeight}px;
+          left: ${relativeLeft}px;
+          width: ${imgRect.width}px;
+          height: ${sliceHeight}px;
           overflow: hidden;
           pointer-events: none;
           will-change: transform;
-          z-index: 10000;
         `;
         
         // Clone image for each slice (already loaded image)
-        const imgLeft = cutImage.cloneNode(true) as HTMLImageElement;
-        const imgRight = cutImage.cloneNode(true) as HTMLImageElement;
+        const imgTop = cutImage.cloneNode(true) as HTMLImageElement;
+        const imgBottom = cutImage.cloneNode(true) as HTMLImageElement;
         
-        imgLeft.style.cssText = `
+        imgTop.style.cssText = `
           width: ${imgRect.width}px;
           height: ${imgRect.height}px;
           object-fit: contain;
@@ -440,41 +519,83 @@ function handleSliceOutEffect(
           display: block;
         `;
         
-        imgRight.style.cssText = `
+        imgBottom.style.cssText = `
           width: ${imgRect.width}px;
           height: ${imgRect.height}px;
           object-fit: contain;
           position: absolute;
-          left: -${sliceWidth}px;
-          top: 0;
+          left: 0;
+          top: -${sliceHeight}px;
           display: block;
         `;
         
-        sliceLeft.appendChild(imgLeft);
-        sliceRight.appendChild(imgRight);
-        imageParent.appendChild(sliceLeft);
-        imageParent.appendChild(sliceRight);
+        sliceTop.appendChild(imgTop);
+        sliceBottom.appendChild(imgBottom);
+        // Append slices to imageParent
+        imageParent.appendChild(sliceTop);
+        imageParent.appendChild(sliceBottom);
         
         // Hide original image
         gsap.set(cutImage, { opacity: 0 });
         
-        // Animate slices spreading apart
+        // Don't make container transparent - slices need to be visible
+        // Next cut will appear on top due to higher z-index
+        
+        // Animate slices moving apart vertically
+        // Top slice moves up, bottom slice moves down
+        // Use shorter duration for slice effect to allow next cut to appear sooner
+        const sliceDuration = TRANSITION_DURATION * 0.5; // 0.5 seconds
         timeline.to(
-          [sliceLeft, sliceRight],
+          sliceTop,
           {
-            x: (index) => index === 0 ? "-100%" : "100%",
+            y: "-50%",
             opacity: 0,
-            duration: TRANSITION_DURATION,
+            duration: sliceDuration,
             ease: "power3.out",
+            onUpdate: function() {
+              // Remove slice when opacity is low enough (not visible)
+              const opacity = gsap.getProperty(this.targets()[0], "opacity");
+              if (this.targets()[0] && typeof opacity === "number" && opacity < 0.1) {
+                if (sliceTop.parentElement) {
+                  sliceTop.remove();
+                }
+              }
+            },
             onComplete: () => {
-              sliceLeft.remove();
-              sliceRight.remove();
+              if (sliceTop.parentElement) {
+                sliceTop.remove();
+              }
             }
           },
           exitAnimationPosition
         );
         
-        console.log('Slice: animation added to timeline');
+        timeline.to(
+          sliceBottom,
+          {
+            y: "50%",
+            opacity: 0,
+            duration: sliceDuration,
+            ease: "power3.out",
+            onUpdate: function() {
+              // Remove slice when opacity is low enough (not visible)
+              const opacity = gsap.getProperty(this.targets()[0], "opacity");
+              if (this.targets()[0] && typeof opacity === "number" && opacity < 0.1) {
+                if (sliceBottom.parentElement) {
+                  sliceBottom.remove();
+                }
+              }
+            },
+            onComplete: () => {
+              if (sliceBottom.parentElement) {
+                sliceBottom.remove();
+              }
+            }
+          },
+          exitAnimationPosition
+        );
+        
+        console.log('Slice out effect: animation added to timeline');
       } else {
         console.warn('Slice: image has no visible dimensions');
       }
@@ -486,11 +607,13 @@ function handleSliceOutEffect(
   }
   
   // Slice effect handles its own fade out, just update z-index after animation
+  // Use shorter duration to match slice animation duration
+  const sliceDuration = TRANSITION_DURATION * 0.00; // 0.00 seconds
   timeline.call(() => {
     gsap.set(currentCutContainer, {
       zIndex: webtoonData.cuts.length - index
     });
-  }, [], `+=${TRANSITION_DURATION}`);
+  }, [], `+=${sliceDuration}`);
 }
 
 /**
@@ -676,66 +799,86 @@ function handleShutterOutEffect(
         if (finalWidth > 0 && finalHeight > 0) {
           // Use fewer strips on mobile for better performance
           const stripCount = window.innerWidth <= 768 ? 10 : 15;
-          const stripWidth = finalWidth / stripCount;
-          // Add small overlap (0.5px) to prevent gaps from sub-pixel rendering
-          const overlap = 0.5;
           
-          // Create strips with slight overlap to prevent visible gaps
-          const strips: HTMLDivElement[] = [];
+          // Calculate how the image would be rendered with object-fit: contain (same as regular img)
+          const imageAspect = currentImage.naturalWidth / currentImage.naturalHeight;
+          const containerAspect = containerRect.width / containerRect.height;
+          
+          // Calculate actual rendered image size (object-fit: contain logic)
+          let renderedWidth: number;
+          let renderedHeight: number;
+          
+          if (imageAspect > containerAspect) {
+            // Image is wider - fit to width, height is smaller
+            renderedWidth = containerRect.width;
+            renderedHeight = renderedWidth / imageAspect;
+          } else {
+            // Image is taller - fit to height, width is smaller
+            renderedHeight = containerRect.height;
+            renderedWidth = renderedHeight * imageAspect;
+          }
+          
+          // Each canvas represents 1/stripCount of the RENDERED image width
+          const canvasWidth = renderedWidth / stripCount;
+          const canvasHeight = renderedHeight;
+          const stripWidth = currentImage.naturalWidth / stripCount;
+          
+          // Calculate rendered image position (centered in container)
+          const renderedLeft = (containerRect.width - renderedWidth) / 2;
+          const renderedTop = (containerRect.height - renderedHeight) / 2;
+          
+          // Create canvas strips
+          const strips: HTMLCanvasElement[] = [];
           for (let i = 0; i < stripCount; i++) {
-            const strip = document.createElement('div');
-            strip.className = 'shutter-out-strip';
+            const canvas = document.createElement('canvas');
+            canvas.className = 'shutter-out-strip';
+            
             const relativeTop = finalTop - parentRect.top;
             const relativeLeft = finalLeft - parentRect.left;
             
-            // Calculate strip position with slight overlap
-            // Each strip starts slightly to the left to overlap with previous
-            const stripLeft = relativeLeft + i * stripWidth - (i > 0 ? overlap : 0);
-            // Each strip is slightly wider to ensure coverage
-            const actualStripWidth = stripWidth + (i > 0 ? overlap : 0) + (i < stripCount - 1 ? overlap : 0);
+            // Calculate strip position - each strip at its exact position within rendered image
+            const stripLeft = relativeLeft + renderedLeft + (i * canvasWidth);
             
-            strip.style.cssText = `
+            // Set canvas size (for high DPI displays)
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = canvasWidth * dpr;
+            canvas.height = canvasHeight * dpr;
+            canvas.style.width = `${canvasWidth}px`;
+            canvas.style.height = `${canvasHeight}px`;
+            
+            canvas.style.cssText = `
               position: absolute;
-              top: ${relativeTop}px;
+              top: ${relativeTop + renderedTop}px;
               left: ${stripLeft}px;
-              width: ${actualStripWidth}px;
-              height: ${finalHeight}px;
-              overflow: hidden;
+              width: ${canvasWidth}px;
+              height: ${canvasHeight}px;
               pointer-events: none;
               will-change: transform;
               z-index: 10000;
             `;
             
-            const imgClone = currentImage.cloneNode(true) as HTMLImageElement;
-            const containerRelativeLeft = finalLeft - containerRect.left;
-            const containerRelativeTop = finalTop - containerRect.top;
-            // Image offset: move image left to show correct strip portion
-            // Account for overlap in offset calculation
-            const imageOffsetX = containerRelativeLeft - (i * stripWidth) + (i > 0 ? overlap : 0);
+            // Draw the strip portion on canvas
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.scale(dpr, dpr);
+              ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+              
+              // Calculate source rectangle (which part of the image to draw)
+              const sourceX = i * stripWidth;
+              const sourceY = 0;
+              const sourceWidth = stripWidth;
+              const sourceHeight = currentImage.naturalHeight;
+              
+              // Draw the strip portion - each strip shows its portion of the image at rendered size
+              ctx.drawImage(
+                currentImage,
+                sourceX, sourceY, sourceWidth, sourceHeight, // Source: which part of image
+                0, 0, canvasWidth, canvasHeight // Destination: fill canvas with rendered size
+              );
+            }
             
-            // Create wrapper for image clone - same size as container
-            const imgWrapper = document.createElement('div');
-            imgWrapper.style.cssText = `
-              position: absolute;
-              top: ${containerRelativeTop}px;
-              left: ${imageOffsetX}px;
-              width: ${containerRect.width}px;
-              height: ${containerRect.height}px;
-              pointer-events: none;
-            `;
-            
-            // Image clone maintains original styles
-            imgClone.style.cssText = `
-              width: 100%;
-              height: 100%;
-              object-fit: contain;
-              display: block;
-            `;
-            
-            imgWrapper.appendChild(imgClone);
-            strip.appendChild(imgWrapper);
-            currentImageParent.appendChild(strip);
-            strips.push(strip);
+            currentImageParent.appendChild(canvas);
+            strips.push(canvas);
           }
           
           // Hide original image

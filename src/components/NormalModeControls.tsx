@@ -1,7 +1,7 @@
 "use client";
 
 import React from 'react';
-import { CaretLeft, CaretRight, CaretDoubleLeft, CaretDoubleRight } from '@phosphor-icons/react';
+import { CaretLeft, CaretRight, CaretDoubleLeft, CaretDoubleRight, GridFour } from '@phosphor-icons/react';
 
 interface NormalModeControlsProps {
   currentCut: number;
@@ -11,6 +11,7 @@ interface NormalModeControlsProps {
   onNextCut: () => void;
   onLastCut: () => void;
   isModeMenuOpen: boolean;
+  onToggleThumbnailDrawer?: () => void;
 }
 
 export default function NormalModeControls({
@@ -21,6 +22,7 @@ export default function NormalModeControls({
   onNextCut,
   onLastCut,
   isModeMenuOpen,
+  onToggleThumbnailDrawer,
 }: NormalModeControlsProps) {
   const isFirstCut = currentCut === 0;
   const isLastCut = currentCut >= totalCuts - 1;
@@ -33,87 +35,53 @@ export default function NormalModeControls({
     }`;
 
   return (
-    <>
-      {/* Mobile: Normal Mode Controls on Left - Hide when mode menu is open */}
-      <div className={`flex md:hidden items-center gap-2 ${isModeMenuOpen ? 'invisible' : 'visible'}`}>
+    <div className="flex items-center gap-2 justify-center w-full">
+      <button
+        onClick={onFirstCut}
+        disabled={isFirstCut}
+        className={buttonClass(isFirstCut)}
+        title="First Page"
+      >
+        <CaretDoubleLeft size={18} weight="bold" className="md:w-5 md:h-5" />
+      </button>
+
+      <button
+        onClick={onPrevCut}
+        disabled={isFirstCut}
+        className={buttonClass(isFirstCut)}
+        title="Previous Page"
+      >
+        <CaretLeft size={18} weight="bold" className="md:w-5 md:h-5" />
+      </button>
+
+      <button
+        onClick={onNextCut}
+        disabled={isLastCut}
+        className={buttonClass(isLastCut)}
+        title="Next Page"
+      >
+        <CaretRight size={18} weight="bold" className="md:w-5 md:h-5" />
+      </button>
+
+      <button
+        onClick={onLastCut}
+        disabled={isLastCut}
+        className={buttonClass(isLastCut)}
+        title="Last Page"
+      >
+        <CaretDoubleRight size={18} weight="bold" className="md:w-5 md:h-5" />
+      </button>
+
+      {onToggleThumbnailDrawer && (
         <button
-          onClick={onFirstCut}
-          disabled={isFirstCut}
-          className={buttonClass(isFirstCut)}
-          title="First Page"
+          onClick={onToggleThumbnailDrawer}
+          className="p-2 rounded-lg border-2 border-white bg-gray-700 hover:bg-gray-600 text-white transition-all duration-200"
+          title="Show Thumbnails"
         >
-          <CaretDoubleLeft size={18} weight="bold" />
+          <GridFour size={18} weight="bold" className="md:w-5 md:h-5" />
         </button>
-
-        <button
-          onClick={onPrevCut}
-          disabled={isFirstCut}
-          className={buttonClass(isFirstCut)}
-          title="Previous Page"
-        >
-          <CaretLeft size={18} weight="bold" />
-        </button>
-
-        <button
-          onClick={onNextCut}
-          disabled={isLastCut}
-          className={buttonClass(isLastCut)}
-          title="Next Page"
-        >
-          <CaretRight size={18} weight="bold" />
-        </button>
-
-        <button
-          onClick={onLastCut}
-          disabled={isLastCut}
-          className={buttonClass(isLastCut)}
-          title="Last Page"
-        >
-          <CaretDoubleRight size={18} weight="bold" />
-        </button>
-      </div>
-      
-      {/* Desktop: Center Normal Mode Controls - Hide when mode menu is open */}
-      {!isModeMenuOpen && (
-        <div className="hidden md:flex items-center gap-2 absolute left-1/2 transform -translate-x-1/2">
-          <button
-            onClick={onFirstCut}
-            disabled={isFirstCut}
-            className={buttonClass(isFirstCut)}
-            title="First Page"
-          >
-            <CaretDoubleLeft size={18} weight="bold" />
-          </button>
-
-          <button
-            onClick={onPrevCut}
-            disabled={isFirstCut}
-            className={buttonClass(isFirstCut)}
-            title="Previous Page"
-          >
-            <CaretLeft size={18} weight="bold" />
-          </button>
-
-          <button
-            onClick={onNextCut}
-            disabled={isLastCut}
-            className={buttonClass(isLastCut)}
-            title="Next Page"
-          >
-            <CaretRight size={18} weight="bold" />
-          </button>
-
-          <button
-            onClick={onLastCut}
-            disabled={isLastCut}
-            className={buttonClass(isLastCut)}
-            title="Last Page"
-          >
-            <CaretDoubleRight size={18} weight="bold" />
-          </button>
-        </div>
       )}
-    </>
+    </div>
   );
 }
 

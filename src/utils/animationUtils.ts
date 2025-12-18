@@ -98,7 +98,7 @@ export function createScrollTriggerConfig(
 export function createScrollAnimation(
   cutContainer: HTMLElement,
   animationType: AnimationType,
-  animationConfig: any
+  animationConfig: unknown
 ) {
   const config = ANIMATION_CONFIGS[animationType];
   
@@ -108,7 +108,7 @@ export function createScrollAnimation(
     if (strips.length > 0) {
       gsap.set(cutContainer, { opacity: 1 });
       const tl = gsap.timeline({
-        ...animationConfig,
+        ...(animationConfig as Record<string, unknown>),
       });
       tl.fromTo(
         strips,
@@ -127,7 +127,7 @@ export function createScrollAnimation(
         opacity: 1,
         duration: 0.5,
         ease: "power2.out",
-        ...animationConfig,
+        ...(animationConfig as Record<string, unknown>),
       });
     }
   }
@@ -137,7 +137,7 @@ export function createScrollAnimation(
     if (slices.length > 0) {
       gsap.set(cutContainer, { opacity: 1 });
       const tl = gsap.timeline({
-        ...animationConfig,
+        ...(animationConfig as Record<string, unknown>),
       });
       // Animate slices spreading apart from center
       tl.fromTo(
@@ -159,7 +159,7 @@ export function createScrollAnimation(
         opacity: 1,
         duration: 0.5,
         ease: "power2.out",
-        ...animationConfig,
+        ...(animationConfig as Record<string, unknown>),
       });
     }
   }
@@ -172,7 +172,7 @@ export function createScrollAnimation(
       ...config.scroll.final,
       duration: config.scroll.duration,
       ease: config.scroll.ease || "power2.out",
-      ...animationConfig,
+      ...(animationConfig as Record<string, unknown>),
     }
   );
 }

@@ -32,7 +32,7 @@ export function setCutInitialState(
     } else if (animationType === "ripple") {
       gsap.set(cutContainer, { 
         opacity: 1, 
-        clipPath: "circle(150% at 50% 50%)",
+        clipPath: "none",
         y: 0, 
         zIndex, 
         immediateRender: true 
@@ -55,7 +55,7 @@ export function setCutInitialState(
     } else if (animationType === "ripple") {
       gsap.set(cutContainer, { 
         opacity: 0, 
-        clipPath: "circle(0% at 50% 50%)",
+        clipPath: "none",
         y: 0, 
         zIndex, 
         immediateRender: true 
@@ -97,7 +97,7 @@ export function getAnimationProps(animationType: AnimationType): gsap.TweenVars 
     case "ripple":
       return { 
         ...baseProps, 
-        clipPath: "circle(150% at 50% 50%)",
+        clipPath: "none",
         ease: "power3.out",
       };
     case "smooth-scroll":
@@ -167,7 +167,7 @@ export function resetCutState(
     } else if (animationType === "ripple") {
       gsap.set(cutContainer, { 
         opacity: 0, 
-        clipPath: "circle(0% at 50% 50%)",
+        clipPath: "none",
         y: 0, 
         zIndex,
       });

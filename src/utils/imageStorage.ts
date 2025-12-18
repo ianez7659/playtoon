@@ -21,7 +21,10 @@ export async function uploadImage(
     if (listError) {
       console.error('Failed to list buckets:', {
         message: listError.message,
-        statusCode: (listError as any).statusCode,
+        statusCode:
+          listError && typeof listError === 'object' && 'statusCode' in listError
+            ? (listError as { statusCode?: unknown }).statusCode
+            : undefined,
         error: JSON.stringify(listError, Object.getOwnPropertyNames(listError)),
       });
       // Continue anyway - might be a permission issue but bucket could still exist
@@ -93,10 +96,10 @@ export async function uploadImage(
     console.log('Public URL:', urlData.publicUrl);
 
     return urlData.publicUrl;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to upload image:', error);
-    if (error?.message) {
-      throw new Error(error.message);
+    if (error && typeof error === 'object' && 'message' in error) {
+      throw new Error(String((error as { message?: unknown }).message));
     }
     throw error;
   }

@@ -15,7 +15,7 @@ export interface AnimationConfig {
   play: {
     initial: (container: HTMLElement, isFirst: boolean) => void;
     final: gsap.TweenVars;
-    outEffect?: OutEffectType; // 아웃 효과 타입
+    outEffect?: OutEffectType; // Out effect type
   };
   reset: {
     visible: (container: HTMLElement) => void;
@@ -41,7 +41,7 @@ export const ANIMATION_CONFIGS: Record<AnimationType, AnimationConfig> = {
         }
       },
       final: { opacity: 1, scale: 1 },
-      outEffect: "fade-out", // 기본 아웃 효과
+      outEffect: "fade-out", // Default out effect
     },
     reset: {
       visible: (container) => {
@@ -280,18 +280,18 @@ export const ANIMATION_CONFIGS: Record<AnimationType, AnimationConfig> = {
         if (isFirst) {
           gsap.set(container, { 
             opacity: 1, 
-            clipPath: "circle(150% at 50% 50%)",
+            clipPath: "none",
             y: 0,
           });
         } else {
           gsap.set(container, { 
             opacity: 0, 
-            clipPath: "circle(0% at 50% 50%)",
+            clipPath: "none",
             y: 0,
           });
         }
       },
-      final: { opacity: 1, clipPath: "circle(150% at 50% 50%)" },
+      final: { opacity: 1, clipPath: "none" },
       outEffect: "fade-out",
     },
     reset: {
@@ -301,7 +301,7 @@ export const ANIMATION_CONFIGS: Record<AnimationType, AnimationConfig> = {
       hidden: (container) => {
         gsap.set(container, { 
           opacity: 0, 
-          clipPath: "circle(0% at 50% 50%)",
+          clipPath: "none",
           y: 0,
         });
       },
@@ -352,19 +352,18 @@ export const ANIMATION_CONFIGS: Record<AnimationType, AnimationConfig> = {
   },
   slice: {
     scroll: {
-      initial: { opacity: 0, scale: 0.5 },
+      initial: { opacity: 0, scale: 1 },
       final: { opacity: 1, scale: 1 },
-      duration: 0.6,
-      ease: "power3.out",
+      duration: 0.5,
+      ease: "power2.out",
     },
     play: {
       initial: (container, isFirst) => {
+        // Slice effect is only for out effect, in effect uses basic fade
         if (isFirst) {
-          // First cut: normal visible state (no slice effect on first cut)
           gsap.set(container, { opacity: 1, scale: 1, y: 0 });
         } else {
-          // Other cuts: start zoomed out (will zoom in)
-          gsap.set(container, { opacity: 0, scale: 0.5, y: 0 });
+          gsap.set(container, { opacity: 0, scale: 1, y: 0 });
         }
       },
       final: { opacity: 1, scale: 1 },
@@ -374,7 +373,7 @@ export const ANIMATION_CONFIGS: Record<AnimationType, AnimationConfig> = {
         gsap.set(container, { opacity: 1, scale: 1, y: 0 });
       },
       hidden: (container) => {
-        gsap.set(container, { opacity: 0, scale: 0.5, y: 0 });
+        gsap.set(container, { opacity: 0, scale: 1, y: 0 });
       },
     },
   },
