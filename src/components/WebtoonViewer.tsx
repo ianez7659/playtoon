@@ -1,8 +1,11 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
+import { gsap } from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { AnimationType } from "@/utils/webtoonStorage";
 import type { WebtoonData } from "@/utils/webtoonStorage";
+import { incrementWebtoonViewCount, incrementSeriesViewCount, incrementEpisodeViewCount } from "@/utils/webtoonStorage";
 import CommandBattle from "./CommandBattle";
 import EncounterPortal from "./EncounterPortal";
 import CutLayer from "./CutLayer";
@@ -18,11 +21,15 @@ import type { ViewMode } from "@/types/webtoonViewer";
 interface WebtoonViewerProps {
   webtoonData: WebtoonData;
   onBack?: () => void;
+  seriesId?: string; // Optional: for incrementing series view count
+  episodeId?: string; // Optional: for incrementing episode view count
 }
 
 export default function WebtoonViewer({
   webtoonData,
   onBack,
+  seriesId,
+  episodeId,
 }: WebtoonViewerProps) {
   const [currentCut, setCurrentCut] = useState(0);
   const [selectedAnimation, setSelectedAnimation] =
@@ -31,10 +38,36 @@ export default function WebtoonViewer({
   const [isBattleActive, setIsBattleActive] = useState(false);
   const [showEncounterPortal, setShowEncounterPortal] = useState(false);
   const [currentBattleCutIndex, setCurrentBattleCutIndex] = useState<number | null>(null);
+  const [isThumbnailDrawerOpen, setIsThumbnailDrawerOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const cutRefs = useRef<(HTMLDivElement | null)[]>([]);
   const desktopModeMenuButtonsRef = useRef<(HTMLButtonElement | null)[]>([]);
   const mobileModeMenuButtonsRef = useRef<(HTMLButtonElement | null)[]>([]);
+  const lastIncrementedKey = useRef<string | null>(null);
+
+  // Increment view count when webtoon/episode is viewed (only once per episode)
+  useEffect(() => {
+    if (!webtoonData?.id) return;
+
+    // Create a unique key for this episode/series combination
+    const currentKey = seriesId && episodeId 
+      ? `${seriesId}-${episodeId}` 
+      : webtoonData.id;
+
+    // Only increment if this is a new episode/series (not already incremented)
+    if (lastIncrementedKey.current !== currentKey) {
+      // If viewing an episode (has seriesId and episodeId), increment both series and episode view counts
+      if (seriesId && episodeId) {
+        incrementSeriesViewCount(seriesId);
+        incrementEpisodeViewCount(episodeId);
+        lastIncrementedKey.current = currentKey;
+      } else {
+        // Legacy: increment webtoon view count for backward compatibility
+        incrementWebtoonViewCount(webtoonData.id);
+        lastIncrementedKey.current = currentKey;
+      }
+    }
+  }, [webtoonData?.id, seriesId, episodeId]);
 
   // Mode toggle hook (initialize mode first)
   const {
@@ -48,7 +81,7 @@ export default function WebtoonViewer({
     },
   });
 
-  // Use scroll animation hook (only for play mode)
+  // Use scroll animation hook (only for play mode, NOT for scroll mode)
   const {
     scrollTween,
     isPlaying,
@@ -59,7 +92,7 @@ export default function WebtoonViewer({
     resetScroll,
   } = useWebtoonScroll({
     webtoonData,
-    useScrollAnimation: mode === 'play',
+    useScrollAnimation: mode === 'play', // Only true for play mode
     selectedAnimation,
     useIndividualAnimations,
     cutRefs,
@@ -74,10 +107,29 @@ export default function WebtoonViewer({
       stopScrollAnimation();
       resetScroll();
     }
+    
+    // Clean up GSAP properties when switching to scroll mode
+    if (mode === 'scroll') {
+      ScrollTrigger.getAll().forEach((trigger) => trigger.kill());
+      
+      setTimeout(() => {
+        cutRefs.current.forEach((cutRef) => {
+          if (cutRef) {
+            const cutContainer = cutRef.querySelector('.cut-container') as HTMLDivElement;
+            if (cutContainer) {
+              gsap.killTweensOf(cutContainer);
+              gsap.set(cutContainer, {
+                clearProps: "all",
+              });
+            }
+          }
+        });
+      }, 50);
+    }
   }, [mode, stopScrollAnimation, resetScroll]);
 
   // Scroll detection hook
-  const isUserScrolling = useScrollDetection(mode);
+  const { isUserScrolling, isAtBottom } = useScrollDetection(mode);
 
   // Mode animation hook
   useModeAnimation({
@@ -147,67 +199,59 @@ export default function WebtoonViewer({
           onNextCut={nextCut}
           onLastCut={goToLastCut}
           isUserScrolling={isUserScrolling}
+          isAtBottom={isAtBottom}
           isPlayingFromHook={isPlaying}
+          isThumbnailDrawerOpen={isThumbnailDrawerOpen}
+          onToggleThumbnailDrawer={() => setIsThumbnailDrawerOpen(!isThumbnailDrawerOpen)}
         />
       )}
 
       {/* Main content area */}
-      <div className={mode === 'scroll' ? 'w-full' : mode === 'play' ? 'w-full' : 'max-w-4xl mx-auto px-4 py-8 pb-24'}>
+      <div className="w-full">
         {mode === 'scroll' ? (
-          /* Scroll mode - sequential cuts with sticky positioning */
-          <div className="relative w-full">
+          /* Scroll mode - simple vertical stacking, NO animations */
+          <div className="w-full" style={{ position: 'relative' }}>
             {webtoonData.cuts.map((cut, index) => {
               const cutWithType = { ...cut, type: cut.type || 'image' };
-              const cutAnimationType = useIndividualAnimations
-                ? cut?.animationType || "basic"
-                : selectedAnimation;
               
               return (
                 <div
                   key={index}
-                  style={{
-                    height: '100vh',
-                    width: '100%',
+                  ref={(el) => {
+                    cutRefs.current[index] = el as HTMLDivElement;
                   }}
+                  style={{
+                    width: '100%',
+                    height: 'auto',
+                    minHeight: index === webtoonData.cuts.length - 1 
+                      ? undefined // Remove minHeight for last cut
+                      : '100vh',
+                    position: 'relative',
+                    margin: 0,
+                    padding: 0,
+                    paddingBottom: index === webtoonData.cuts.length - 1 ? '9vh' : undefined, // Add 9vh padding for last cut on mobile
+                  }}
+                  className={index === webtoonData.cuts.length - 1 ? 'last-cut-mobile' : ''}
                 >
-                  <section
-                    ref={(el) => {
-                      cutRefs.current[index] = el as HTMLDivElement;
+                  <CutLayer
+                    cut={cut}
+                    index={index}
+                    totalCuts={webtoonData.cuts.length}
+                    setRef={(el) => {}}
+                    isBattleActive={isBattleActive}
+                    currentBattleCutIndex={currentBattleCutIndex}
+                    onBattleEnd={(winner) => {
+                      console.log('Battle ended! Winner:', winner.name);
+                      setIsBattleActive(false);
                     }}
-                    className="cut-section"
-                    style={{
-                      position: 'relative',
-                      width: '100%',
-                      height: '100vh',
-                      minHeight: '100vh',
-                      maxHeight: '100vh',
-                      overflow: 'hidden',
-                      margin: 0,
-                      padding: 0,
-                    }}
-                  >
-                    <CutLayer
-                      cut={cut}
-                      index={index}
-                      totalCuts={webtoonData.cuts.length}
-                      setRef={(el) => {
-                        // cut-container is inside CutLayer, so we need to set it differently
-                        // The ref is already set on the section element above
-                      }}
-                      isBattleActive={isBattleActive}
-                      currentBattleCutIndex={currentBattleCutIndex}
-                      onBattleEnd={(winner) => {
-                        console.log('Battle ended! Winner:', winner.name);
-                        setIsBattleActive(false);
-                      }}
-                      animationType={cutAnimationType}
-                      isPlaying={false}
-                    />
-                  </section>
+                    animationType="basic"
+                    isPlaying={false}
+                    mode="scroll"
+                  />
                 </div>
               );
             })}
-              </div>
+          </div>
         ) : mode === 'play' ? (
           /* Play mode - fixed position layering, no scroll */
           <div className="relative w-full" style={{ marginTop: 0, paddingTop: 0, height: '100vh', overflow: 'hidden' }}>
@@ -249,78 +293,52 @@ export default function WebtoonViewer({
         ) : (
           mode === 'normal' && (
           /* Normal mode - single cut with navigation */
-            <div className="mb-2">
-              <div className="rounded-lg p-4 mb-4">
-                <div className="w-full h-[70vh] flex items-center justify-center">
-                  {(() => {
-                    const currentCutData = { ...webtoonData.cuts[currentCut], type: webtoonData.cuts[currentCut].type || 'image' };
-                    console.log('Current cut in normal mode:', currentCutData);
-                    
-                    return currentCutData.type === 'command-battle' ? (
-                      <div className="w-full h-full">
-                        <CommandBattle
-                          player1={{
-                            id: 'player1',
-                            name: 'Hero',
-                            hp: 100,
-                            maxHp: 100,
-                            attack: 25,
-                            defense: 10
-                          }}
-                          player2={{
-                            id: 'player2',
-                            name: 'Enemy',
-                            hp: 80,
-                            maxHp: 80,
-                            attack: 20,
-                            defense: 8
-                          }}
-                          onBattleStart={() => {
-                            setIsBattleActive(true);
-                          }}
-                          onBattleEnd={(winner) => {
-                            console.log('Battle ended! Winner:', winner.name);
-                            setIsBattleActive(false);
-                          }}
-                        />
-                      </div>
-                    ) : currentCutData.imageUrl ? (
-                      <img
-                        src={currentCutData.imageUrl}
-                    alt={`Cut ${currentCut + 1}`}
-                        className="max-w-full max-h-full object-contain rounded-lg"
-                  />
-                ) : (
-                  <div className="text-center text-gray-400">
-                    {/* <div className="text-4xl mb-2">📖</div> */}
-                    <p>Cut {currentCut + 1}</p>
-                  </div>
-                    );
-                  })()}
-              </div>
-              
-                {/* <div className="text-center">
-                <h2 className="text-xl font-semibold mb-2">
-                    {webtoonData.cuts[currentCut].title ||
-                      `Cut ${currentCut + 1}`}
-                </h2>
-                {webtoonData.cuts[currentCut].description && (
-                  <p className="text-gray-300">
-                    {webtoonData.cuts[currentCut].description}
-                  </p>
-                )}
-                </div> */}
-              </div>
+            <div className="relative w-full" style={{ marginTop: 0, paddingTop: 0, height: '100vh', overflow: 'hidden' }}>
+              <section
+                className="cut-section"
+                style={{
+                  position: 'relative',
+                  width: '100%',
+                  height: '100vh',
+                  minHeight: '100vh',
+                  maxHeight: '100vh',
+                  overflow: 'hidden',
+                  margin: 0,
+                  padding: 0,
+                }}
+              >
+                <CutLayer
+                  cut={webtoonData.cuts[currentCut]}
+                  index={currentCut}
+                  totalCuts={webtoonData.cuts.length}
+                  setRef={(el) => {
+                    // Ref is handled by CutLayer internally
+                  }}
+                  isBattleActive={isBattleActive}
+                  currentBattleCutIndex={currentBattleCutIndex}
+                  onBattleEnd={(winner) => {
+                    console.log('Battle ended! Winner:', winner.name);
+                    setIsBattleActive(false);
+                  }}
+                  animationType={useIndividualAnimations ? (webtoonData.cuts[currentCut].animationType || "basic") : selectedAnimation}
+                  isPlaying={false}
+                />
+              </section>
             </div>
           )
         )}
 
-        {/* Cut thumbnails grid - only show in normal mode */}
+        {/* Cut thumbnails drawer - only show in normal mode */}
         {mode === 'normal' && (
           <CutThumbnailGrid
             webtoonData={webtoonData}
             currentCut={currentCut}
-            onCutSelect={goToCut}
+            onCutSelect={(index) => {
+              goToCut(index);
+              setIsThumbnailDrawerOpen(false);
+            }}
+            isOpen={isThumbnailDrawerOpen}
+            onClose={() => setIsThumbnailDrawerOpen(false)}
           />
         )}
 
