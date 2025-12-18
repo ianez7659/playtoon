@@ -1,20 +1,20 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { saveWebtoon, updateWebtoon, getWebtoonById, WebtoonData, CutData, AnimationType, OutEffectType } from '@/utils/webtoonStorage';
+import { saveEpisode, updateEpisode, getEpisodeById, EpisodeData, CutData, AnimationType, OutEffectType, Genre } from '@/utils/webtoonStorage';
 import { uploadImage, deleteImage, getStoragePathFromUrl } from '@/utils/imageStorage';
 import WebtoonViewer from '@/components/WebtoonViewer';
 
 interface WebtoonPageProps {
   cutCount: number;
-  webtoonId: string;
-  onSave?: (webtoonData: WebtoonData) => void;
+  webtoonId: string; // episodeId
+  seriesId: string; // Required for episode creation
+  onSave?: () => void;
+  webtoonType?: 'amateur' | 'regular'; // Type of webtoon being created
 }
 
-export default function WebtoonPage({ cutCount, webtoonId, onSave }: WebtoonPageProps) {
-  const [webtoonTitle, setWebtoonTitle] = useState('');
-  const [webtoonDescription, setWebtoonDescription] = useState('');
-  const [thumbnailUrl, setThumbnailUrl] = useState<string | undefined>(undefined);
+export default function WebtoonPage({ cutCount, webtoonId, seriesId, onSave, webtoonType = 'regular' }: WebtoonPageProps) {
+  const [episodeTitle, setEpisodeTitle] = useState('');
   const [cuts, setCuts] = useState<CutData[]>(
     Array.from({ length: cutCount }, () => ({ title: '', description: '', animationType: 'basic', duration: 3, type: 'image' }))
   );
@@ -22,26 +22,34 @@ export default function WebtoonPage({ cutCount, webtoonId, onSave }: WebtoonPage
   const [uploadingImages, setUploadingImages] = useState<Set<number>>(new Set());
   const [showPreview, setShowPreview] = useState(false);
 
-  // Load existing webtoon data if editing
+  const genreLabels: Record<Genre, string> = {
+    'action': 'Action',
+    'romance': 'Romance',
+    'comedy': 'Comedy',
+    'drama': 'Drama',
+    'fantasy': 'Fantasy',
+    'horror': 'Horror',
+    'sci-fi': 'Sci-Fi',
+  };
+
+  // Load existing episode data if editing
   useEffect(() => {
-    const loadWebtoon = async () => {
+    const loadEpisode = async () => {
       setIsLoading(true);
       try {
-        const existingWebtoon = await getWebtoonById(webtoonId);
-        if (existingWebtoon) {
-          setWebtoonTitle(existingWebtoon.title);
-          setWebtoonDescription(existingWebtoon.description);
-          setThumbnailUrl(existingWebtoon.thumbnailUrl);
-          setCuts(existingWebtoon.cuts.length > 0 
-            ? existingWebtoon.cuts 
+        const existingEpisode = await getEpisodeById(webtoonId);
+        if (existingEpisode) {
+          setEpisodeTitle(existingEpisode.episodeTitle);
+          setCuts(existingEpisode.cuts.length > 0 
+            ? existingEpisode.cuts 
             : Array.from({ length: cutCount }, () => ({ title: '', description: '', animationType: 'basic', duration: 3, type: 'image' }))
           );
         } else {
-          // New webtoon - initialize with empty cuts
+          // New episode - initialize with empty cuts
           setCuts(Array.from({ length: cutCount }, () => ({ title: '', description: '', animationType: 'basic', duration: 3, type: 'image' })));
         }
       } catch (error) {
-        console.error('Failed to load webtoon:', error);
+        console.error('Failed to load episode:', error);
         // Initialize with empty cuts even on error
         setCuts(Array.from({ length: cutCount }, () => ({ title: '', description: '', animationType: 'basic', duration: 3, type: 'image' })));
       } finally {
@@ -49,7 +57,7 @@ export default function WebtoonPage({ cutCount, webtoonId, onSave }: WebtoonPage
       }
     };
 
-    loadWebtoon();
+    loadEpisode();
   }, [webtoonId, cutCount]);
 
   const handleCutChange = (index: number, field: keyof CutData, value: string | AnimationType) => {
@@ -102,7 +110,7 @@ export default function WebtoonPage({ cutCount, webtoonId, onSave }: WebtoonPage
       // Generate unique file path
       const fileExt = file.name.split('.').pop();
       const fileName = `${webtoonId}_cut_${index}_${Date.now()}.${fileExt}`;
-      const filePath = `webtoons/${webtoonId}/cuts/${fileName}`;
+      const filePath = `episodes/${webtoonId}/cuts/${fileName}`;
 
       console.log('Uploading to path:', filePath);
 
@@ -115,9 +123,12 @@ export default function WebtoonPage({ cutCount, webtoonId, onSave }: WebtoonPage
       const updatedCuts = [...cuts];
       updatedCuts[index] = { ...updatedCuts[index], imageUrl };
       setCuts(updatedCuts);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to upload image:', error);
-      const errorMessage = error?.message || 'Unknown error';
+      const errorMessage =
+        error && typeof error === 'object' && 'message' in error
+          ? String((error as { message?: unknown }).message)
+          : 'Unknown error';
       alert(`Failed to upload image: ${errorMessage}. Please check the browser console for details.`);
     } finally {
       setUploadingImages(prev => {
@@ -149,78 +160,45 @@ export default function WebtoonPage({ cutCount, webtoonId, onSave }: WebtoonPage
     setCuts(updatedCuts);
   };
 
-  const handleThumbnailUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    try {
-      // Generate unique file path
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${webtoonId}_thumbnail_${Date.now()}.${fileExt}`;
-      const filePath = `webtoons/${webtoonId}/thumbnail/${fileName}`;
-
-      // Upload to Supabase Storage
-      const url = await uploadImage(file, filePath);
-      setThumbnailUrl(url);
-    } catch (error) {
-      console.error('Failed to upload thumbnail:', error);
-      alert('Failed to upload thumbnail. Please try again.');
-    }
-  };
-
-  const handleThumbnailRemove = async () => {
-    if (thumbnailUrl) {
-      try {
-        // Delete from Supabase Storage if it's a Supabase URL
-        const storagePath = getStoragePathFromUrl(thumbnailUrl);
-        if (storagePath) {
-          await deleteImage(storagePath);
-        }
-      } catch (error) {
-        console.error('Failed to delete thumbnail from storage:', error);
-        // Continue with removal even if storage delete fails
-      }
-    }
-    setThumbnailUrl(undefined);
-  };
-
   const handleSave = async () => {
-    if (!webtoonTitle.trim()) {
-      alert('Please enter a webtoon title');
+    if (!episodeTitle.trim()) {
+      alert('Please enter an episode title');
       return;
     }
 
     try {
-      // Get existing webtoon to preserve createdAt
-      const existingWebtoon = await getWebtoonById(webtoonId);
-
-      const webtoonData: WebtoonData = {
+      // Get existing episode to preserve createdAt
+      const existingEpisode = await getEpisodeById(webtoonId);
+      
+      const episodeData: EpisodeData = {
         id: webtoonId,
-        title: webtoonTitle,
-        description: webtoonDescription,
-        thumbnailUrl: thumbnailUrl,
-        cuts: cuts,
-        createdAt: existingWebtoon?.createdAt || new Date().toISOString(), // Preserve original creation date
+        seriesId: seriesId,
+        episodeTitle: episodeTitle.trim(),
+        cuts: cuts.filter(cut => cut.imageUrl || cut.type === 'command-battle'),
+        createdAt: existingEpisode?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
 
-      if (existingWebtoon) {
-        await updateWebtoon(webtoonId, webtoonData);
-        alert('Webtoon updated successfully!');
+      if (existingEpisode) {
+        await updateEpisode(webtoonId, episodeData);
+        alert('Episode updated successfully!');
       } else {
-        await saveWebtoon(webtoonData);
-        alert('Webtoon saved successfully!');
+        await saveEpisode(episodeData);
+        alert('Episode saved successfully!');
       }
       
-      onSave?.(webtoonData);
+      if (onSave) {
+        onSave();
+      }
     } catch (error) {
-      console.error('Failed to save webtoon:', error);
-      alert('Failed to save webtoon. Please try again.');
+      console.error('Failed to save episode:', error);
+      alert('Failed to save episode. Please try again.');
     }
   };
 
   const handlePreview = () => {
-    if (!webtoonTitle.trim()) {
-      alert('Please enter a webtoon title to preview');
+    if (!episodeTitle.trim()) {
+      alert('Please enter an episode title to preview');
       return;
     }
 
@@ -233,83 +211,28 @@ export default function WebtoonPage({ cutCount, webtoonId, onSave }: WebtoonPage
         {/* Header section */}
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Webtoon Editor</h1>
-            <p className="text-gray-600">Webtoon ID: {webtoonId}</p>
+            <h1 className="text-2xl font-bold text-gray-900">Episode Editor</h1>
+            <p className="text-gray-600">Episode ID: {webtoonId}</p>
           </div>
           <div className="text-sm text-gray-500">
             Total {cutCount} cuts
           </div>
         </div>
 
-        {/* Webtoon information form */}
+        {/* Episode information form */}
         <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-4">Webtoon Information</h2>
-          <div className="flex flex-col md:flex-row gap-6">
-            {/* Thumbnail Image - Top on mobile, Right on desktop */}
-            <div className="w-full md:w-48 flex-shrink-0 order-first md:order-last">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Cover Image
-              </label>
-              <div className="aspect-[3/4] bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 relative overflow-hidden">
-                {thumbnailUrl ? (
-                  <>
-                    <img
-                      src={thumbnailUrl}
-                      alt="Webtoon cover"
-                      className="w-full h-full object-cover"
-                    />
-                    <button
-                      onClick={handleThumbnailRemove}
-                      className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600 transition-colors"
-                      title="Remove image"
-                    >
-                      ×
-                    </button>
-                  </>
-                ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center p-4">
-                    <span className="text-gray-400 text-sm block mb-2">No cover image</span>
-                    <label className="cursor-pointer bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600 transition-colors">
-                      Upload Image
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleThumbnailUpload}
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            {/* Left side: Title and Description */}
-            <div className="flex-1 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Webtoon Title *
-                </label>
-                <input
-                  type="text"
-                  value={webtoonTitle}
-                  onChange={(e) => setWebtoonTitle(e.target.value)}
-                  placeholder="Enter webtoon title"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Description
-                </label>
-                <textarea
-                  value={webtoonDescription}
-                  onChange={(e) => setWebtoonDescription(e.target.value)}
-                  placeholder="Enter webtoon description"
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
+          <h2 className="text-lg font-semibold mb-4">Episode Information</h2>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Episode Title <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={episodeTitle}
+              onChange={(e) => setEpisodeTitle(e.target.value)}
+              placeholder="Enter episode title"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
         </div>
 
@@ -439,7 +362,6 @@ export default function WebtoonPage({ cutCount, webtoonId, onSave }: WebtoonPage
                         <option value="blur-fade">Blur Fade</option>
                         <option value="ripple">Ripple</option>
                         <option value="shutter">Shutter / Panel Split</option>
-                        <option value="slice">Slice</option>
                       </select>
                     </div>
                   )}
@@ -501,9 +423,9 @@ export default function WebtoonPage({ cutCount, webtoonId, onSave }: WebtoonPage
           <WebtoonViewer
             webtoonData={{
               id: webtoonId,
-              title: webtoonTitle,
-              description: webtoonDescription,
-              thumbnailUrl: thumbnailUrl,
+              title: episodeTitle,
+              description: '',
+              thumbnailUrl: undefined,
               cuts: cuts,
               createdAt: new Date().toISOString(),
             }}
