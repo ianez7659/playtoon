@@ -30,4 +30,36 @@ body {
 html {
   margin: 0;
   padding: 0;
+  overscroll-behavior-y: none; /* Prevent bounce effect and viewport recalculation at scroll end */
+}
+
+/* Mobile only: Remove paddingBottom for last cut on desktop */
+@media (min-width: 769px) {
+  .last-cut-mobile {
+    padding-bottom: 0 !important;
+  }
+}
+
+/* Accordion slide up animation */
+@keyframes slideUp {
+  from {
+    max-height: 0;
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    max-height: 200px;
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Hide scrollbar for category menu */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari and Opera */
 }
