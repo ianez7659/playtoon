@@ -10,14 +10,14 @@ interface CutInputModalProps {
 }
 
 export default function CutInputModal({ isOpen, onClose, onConfirm }: CutInputModalProps) {
-  const [cutCount, setCutCount] = useState<number>(2);
+  const [cutCount, setCutCount] = useState<number>(1);
   const [error, setError] = useState<string>('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (cutCount < 2 || cutCount > 20) {
-      setError('Number of cuts must be between 2 and 20.');
+    if (cutCount < 1 || cutCount > 20) {
+      setError('Number of cuts must be between 1 and 20.');
       return;
     }
     
@@ -26,11 +26,6 @@ export default function CutInputModal({ isOpen, onClose, onConfirm }: CutInputMo
     onClose();
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = parseInt(e.target.value) || 0;
-    setCutCount(value);
-    setError('');
-  };
 
   if (!isOpen) return null;
 
@@ -42,18 +37,24 @@ export default function CutInputModal({ isOpen, onClose, onConfirm }: CutInputMo
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
             <label htmlFor="cutCount" className="block text-sm font-medium text-gray-700 mb-2">
-              Enter the number of cuts to create (2-20)
+              Select the number of cuts to create (1-20)
             </label>
-            <input
-              type="number"
+            <select
               id="cutCount"
-              min="2"
-              max="20"
               value={cutCount}
-              onChange={handleInputChange}
+              onChange={(e) => {
+                const value = parseInt(e.target.value) || 1;
+                setCutCount(value);
+                setError('');
+              }}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Enter number of cuts"
-            />
+            >
+              {Array.from({ length: 20 }, (_, i) => i + 1).map((num) => (
+                <option key={num} value={num}>
+                  {num} {num === 1 ? 'cut' : 'cuts'}
+                </option>
+              ))}
+            </select>
             {error && (
               <p className="text-red-500 text-sm mt-1">{error}</p>
             )}
