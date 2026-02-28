@@ -5,6 +5,8 @@
 
 Playtoon is a Next.js webtoon viewer/creator. It supports a **Series → Episodes → Cuts** structure and multiple viewing modes with GSAP-powered transitions.
 
+**Live Demo**: [https://playtoon-six.vercel.app/](https://playtoon-six.vercel.app/)
+
 ## Features
 
 <img src="public/readme/playtoon-3.png" alt="Preview" width="300" />
